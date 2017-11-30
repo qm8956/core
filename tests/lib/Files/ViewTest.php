@@ -1927,12 +1927,29 @@ class ViewTest extends TestCase {
 
 		$this->assertNull($this->getFileLockType($view, $path), 'File not locked before operation');
 
+		$calledCreateAllowedRun = [];
+		$calledWriteAllowedRun = [];
+		\OC::$server->getEventDispatcher()->addListener('file.create.allowed', function ($event) use (&$calledCreateAllowedRun) {
+			$calledCreateAllowedRun[] = 'file.create.allowed';
+			array_push($calledCreateAllowedRun, $event);
+		});
+		\OC::$server->getEventDispatcher()->addListener('file.write.allowed', function ($event) use (&$calledWriteAllowedRun) {
+			$calledWriteAllowedRun[] = 'file.write.allowed';
+			array_push($calledWriteAllowedRun, $event);
+		});
 		// do operation
 		$view->file_put_contents($path, fopen('php://temp', 'r+'));
 
 		$this->assertEquals(ILockingProvider::LOCK_SHARED, $lockTypePre, 'File locked properly during pre-hook');
 		$this->assertEquals(ILockingProvider::LOCK_SHARED, $lockTypePost, 'File locked properly during post-hook');
 		$this->assertEquals(ILockingProvider::LOCK_EXCLUSIVE, $lockTypeDuring, 'File locked properly during operation');
+
+		$this->assertInstanceOf(GenericEvent::class, $calledCreateAllowedRun[1]);
+		$this->assertInstanceOf(GenericEvent::class, $calledWriteAllowedRun[1]);
+		$this->assertArrayHasKey('run', $calledCreateAllowedRun[1]);
+		$this->assertArrayHasKey('run', $calledWriteAllowedRun[1]);
+		$this->assertEquals('file.write.allowed', $calledWriteAllowedRun[0]);
+		$this->assertEquals('file.create.allowed', $calledCreateAllowedRun[0]);
 
 		$this->assertNull($this->getFileLockType($view, $path));
 	}

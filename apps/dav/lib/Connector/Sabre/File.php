@@ -111,7 +111,6 @@ class File extends Node implements IFile {
 	 */
 	public function put($data) {
 		return $this->emittingCall(function () use (&$data) {
-			$event = new GenericEvent(null, []);
 			try {
 				$exists = $this->fileView->file_exists($this->path);
 				if ($this->info && $exists && !$this->info->isUpdateable()) {
@@ -275,22 +274,35 @@ class File extends Node implements IFile {
 		}
 		$hookPath = Filesystem::getView()->getRelativePath($this->fileView->getAbsolutePath($path));
 		$run = true;
+		$event = new GenericEvent(null);
 
 		if (!$exists) {
 			\OC_Hook::emit(\OC\Files\Filesystem::CLASSNAME, \OC\Files\Filesystem::signal_create, [
 				\OC\Files\Filesystem::signal_param_path => $hookPath,
 				\OC\Files\Filesystem::signal_param_run => &$run,
 			]);
+			if ($run) {
+				$event->setArgument('run', $run);
+				\OC::$server->getEventDispatcher()->dispatch('file.create.allowed', $event);
+			}
 		} else {
 			\OC_Hook::emit(\OC\Files\Filesystem::CLASSNAME, \OC\Files\Filesystem::signal_update, [
 				\OC\Files\Filesystem::signal_param_path => $hookPath,
 				\OC\Files\Filesystem::signal_param_run => &$run,
 			]);
+			if ($run) {
+				$event->setArgument('run', $run);
+				\OC::$server->getEventDispatcher()->dispatch('file.update.allowed', $event);
+			}
 		}
 		\OC_Hook::emit(\OC\Files\Filesystem::CLASSNAME, \OC\Files\Filesystem::signal_write, [
 			\OC\Files\Filesystem::signal_param_path => $hookPath,
 			\OC\Files\Filesystem::signal_param_run => &$run,
 		]);
+		if ($run) {
+			$event->setArgument('run', $run);
+			\OC::$server->getEventDispatcher()->dispatch('file.write.allowed', $event);
+		}
 		return $run;
 	}
 

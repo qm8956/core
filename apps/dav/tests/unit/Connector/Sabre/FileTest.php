@@ -286,10 +286,24 @@ class FileTest extends TestCase {
 		// action
 		$caughtException = null;
 		try {
+			$calledCreateAllowed = [];
+			$calledWriteAllowed = [];
+			\OC::$server->getEventDispatcher()->addListener('file.create.allowed', function (GenericEvent $event) use (&$calledCreateAllowed) {
+				$calledCreateAllowed[] = 'file.create.allowed';
+				array_push($calledCreateAllowed, $event);
+			});
+			\OC::$server->getEventDispatcher()->addListener('file.create.allowed', function (GenericEvent $event) use (&$calledWriteAllowed) {
+				$calledWriteAllowed[] = 'file.write.allowed';
+				array_push($calledWriteAllowed, $event);
+			});
 			// last chunk
 			$file->acquireLock(ILockingProvider::LOCK_SHARED);
 			$file->put('test data two');
 			$file->releaseLock(ILockingProvider::LOCK_SHARED);
+			$this->assertInstanceOf(GenericEvent::class, $calledCreateAllowed[1]);
+			$this->assertArrayHasKey('run', $calledCreateAllowed[1]);
+			$this->assertInstanceOf(GenericEvent::class, $calledWriteAllowed[1]);
+			$this->assertArrayHasKey('run', $calledWriteAllowed[1]);
 		} catch (\Exception $e) {
 			$caughtException = $e;
 		}
@@ -407,19 +421,19 @@ class FileTest extends TestCase {
 					'HTTP_X_OC_MTIME' => -34.43,
 					'expected result' => -34
 			],
-			"long int" => [ 
+			"long int" => [
 					'HTTP_X_OC_MTIME' => PHP_INT_MAX,
-					'expected result' => PHP_INT_MAX 
+					'expected result' => PHP_INT_MAX
 			],
-			"too long int" => [ 
+			"too long int" => [
 					'HTTP_X_OC_MTIME' => PHP_INT_MAX + 1,
-					'expected result' => PHP_INT_MAX 
+					'expected result' => PHP_INT_MAX
 			],
-			"long negative int" => [ 
+			"long negative int" => [
 					'HTTP_X_OC_MTIME' => PHP_INT_MAX * - 1,
 					'expected result' => (PHP_INT_MAX * - 1)
 			],
-			"too long negative int" => [ 
+			"too long negative int" => [
 					'HTTP_X_OC_MTIME' => (PHP_INT_MAX * - 1) - 1,
 					'expected result' => (PHP_INT_MAX * - 1)
 			],
@@ -451,7 +465,7 @@ class FileTest extends TestCase {
 						'HTTP_X_OC_MTIME' => $requestMtime,
 				]
 		], null, $this->config, null);
-		
+
 		$_SERVER['HTTP_OC_CHUNKED'] = true;
 		$file = 'foo.txt';
 		$this->doPut($file.'-chunking-12345-2-0', null, $request);
@@ -508,7 +522,23 @@ class FileTest extends TestCase {
 
 		HookHelper::setUpHooks();
 
+		$calledUploadAllowed = [];
+		$calledWriteAllowed = [];
+		\OC::$server->getEventDispatcher()->addListener('file.update.allowed', function (GenericEvent $event) use (&$calledUploadAllowed) {
+			$calledUploadAllowed[] = 'file.update.allowed';
+			array_push($calledUploadAllowed, $event);
+		});
+		\OC::$server->getEventDispatcher()->addListener('file.write.allowed', function (GenericEvent $event) use (&$calledWriteAllowed) {
+			$calledWriteAllowed[] = 'file.write.allowed';
+			array_push($calledWriteAllowed, $event);
+		});
+
 		$this->assertNotEmpty($this->doPut('/foo.txt'));
+
+		$this->assertArrayHasKey('run', $calledWriteAllowed[1]);
+		$this->assertArrayHasKey('run', $calledUploadAllowed[1]);
+		$this->assertInstanceOf(GenericEvent::class, $calledUploadAllowed[1]);
+		$this->assertInstanceOf(GenericEvent::class, $calledWriteAllowed[1]);
 
 		$this->assertCount(4, HookHelper::$hookCalls);
 		$this->assertHookCall(
